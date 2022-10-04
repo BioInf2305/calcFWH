@@ -60,6 +60,8 @@ std::map<int,std::vector<std::string>> snpToMap(const std::string& snpFile, int&
 	int lineNumber = 0;
 
 	int startWindow = windowSize;
+	std::string minWindow = "-9";
+	std::string maxWindow = "-9";
 	std::string chrom = "NA";
 	std::vector<std::string>vectorLine;
 	std::string stringPos = "NA";
@@ -74,24 +76,26 @@ std::map<int,std::vector<std::string>> snpToMap(const std::string& snpFile, int&
 		while(std::getline(ss, word, ' ')){
 			vectorLine.push_back(word);
 		}
+		int pos = std::stoi(vectorLine[3]);
+		minWindow = std::to_string(pos - pos % windowSize);
+		maxWindow = std::to_string(std::stoi(minWindow)+windowSize);
 		//if the chromosome name changes, add the last record as the row number
 		if (vectorLine[0] != chrom && chrom != "NA" ){
 			chrom = vectorLine[0];
 			startWindow = windowSize;
-			std::vector<std::string>tmpVec {vectorLine[0], vectorLine[3]};
+			std::vector<std::string>tmpVec {vectorLine[0], minWindow, maxWindow};
 			snpLineMap[lineNumber] = tmpVec;
 		}
-		int pos = std::stoi(vectorLine[3]);
 		if(pos>startWindow){
-		int insideWhile = 0;
-		while(pos > startWindow){
-			insideWhile = 1;
-			startWindow += windowSize;
-			}	
-		if(insideWhile == 1){
-			std::vector<std::string>tmpVec {vectorLine[0], vectorLine[3]};
-			snpLineMap[lineNumber] = tmpVec;
-			}
+			int insideWhile = 0;
+			while(pos > startWindow){
+				insideWhile = 1;
+				startWindow += windowSize;
+				}	
+			if(insideWhile == 1){
+				std::vector<std::string>tmpVec {vectorLine[0], minWindow, maxWindow};
+				snpLineMap[lineNumber] = tmpVec;
+				}
 
 		}
 
@@ -99,7 +103,7 @@ std::map<int,std::vector<std::string>> snpToMap(const std::string& snpFile, int&
 	}
 	//add the last record in map
 	if(vectorLine.size()>0){
-		std::vector<std::string>tmpVec {vectorLine[0],vectorLine[3]};
+		std::vector<std::string>tmpVec {vectorLine[0],minWindow, maxWindow};
 		snpLineMap[lineNumber] = tmpVec;
 	}
 	
@@ -267,7 +271,7 @@ void writeOutput(std::map<std::string,std::vector<int>>& popDerivedCountMap, std
 		const char *popF = popName.c_str();
 		std::vector<std::string>tmpMap = snpLineMap[lineCount];
 		os.open(popF, std::ofstream::out | std::ofstream::app);
-		os<<tmpMap[0]<<"\t"<<tmpMap[1]<<"\t";
+		os<<tmpMap[0]<<"\t"<<tmpMap[1]<<"\t"<<tmpMap[2]<<"\t";
 		for(float measure: popMeasures ){
 			os<< measure <<"\t";
 		}
