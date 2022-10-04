@@ -9,6 +9,11 @@
 #include <algorithm>
 #include <cmath>
 
+//following function output the map with pop name as a key and a vector of its indices (position in geno line) as value
+//geno file 
+//11112222
+//so first four genotype belongs to pop1 and then the next genotypes belong to pop2
+//output map--> {pop1,{0,1,2,3},pop2,{4,5,6,7}}
 
 std::map<std::string,std::vector<int>> indToMap(const std::string& indFile){
 
@@ -45,14 +50,19 @@ std::map<std::string,std::vector<int>> indToMap(const std::string& indFile){
     return popMap;
 }
 
-std::vector<int> snpToVec(const std::string& snpFile, int& windowSize){
+//folllowing function output the map with line number as key and vector of chrom name and position as value
+//{1,{chrm1,10},2,{chrm1,11},3,{chrm1,12}}
+
+std::map<int,std::vector<std::string>> snpToMap(const std::string& snpFile, int& windowSize){
 	
-	std::vector<int> snpVec;
+	std::map<int,std::vector<std::string>> snpLineMap;
 	//the following variable link the marker record from .snp file to its respective row in geno file
-	int lineNumber = -1;
+	int lineNumber = 0;
 
 	int startWindow = windowSize;
 	std::string chrom = "NA";
+	std::vector<std::string>vectorLine;
+	std::string stringPos = "NA";
 	std::ifstream source;
 	source.open(snpFile);
 	std::string line;
@@ -60,15 +70,16 @@ std::vector<int> snpToVec(const std::string& snpFile, int& windowSize){
 		lineNumber +=1 ;
 		std::stringstream ss (line);
 		std::string word;
-		std::vector<std::string>vectorLine;
+		vectorLine.clear();
 		while(std::getline(ss, word, ' ')){
 			vectorLine.push_back(word);
 		}
 		//if the chromosome name changes, add the last record as the row number
-		if (vectorLine[0] != chrom){
+		if (vectorLine[0] != chrom && chrom != "NA" ){
 			chrom = vectorLine[0];
 			startWindow = windowSize;
-			snpVec.push_back(lineNumber);
+			std::vector<std::string>tmpVec {vectorLine[0], vectorLine[3]};
+			snpLineMap[lineNumber] = tmpVec;
 		}
 		int pos = std::stoi(vectorLine[3]);
 		if(pos>startWindow){
@@ -78,17 +89,43 @@ std::vector<int> snpToVec(const std::string& snpFile, int& windowSize){
 			startWindow += windowSize;
 			}	
 		if(insideWhile == 1){
-			snpVec.push_back(lineNumber);
+			std::vector<std::string>tmpVec {vectorLine[0], vectorLine[3]};
+			snpLineMap[lineNumber] = tmpVec;
 			}
 
 		}
 
 			
 	}
+	//add the last record in map
+	if(vectorLine.size()>0){
+		std::vector<std::string>tmpVec {vectorLine[0],vectorLine[3]};
+		snpLineMap[lineNumber] = tmpVec;
+	}
 	
-	return snpVec;
+	return snpLineMap;
 
 }
+
+//following function sorts the snp line map
+//{line number, {chrm, pos}}
+//input --> {3,{chrm2,10},4,{chrm2,15},2,{chrm1,20},1,{chrm1,10}}
+//output --> {1,{chrm1,10},2,{chrm1,20},3,{chrm2,10},4,{chrm2,15}}
+
+std::vector<int> snpLineMapToSortedLineNumVec(std::map<int,std::vector<std::string>>& snpLineMap){
+
+	std::vector<int>sortedLineNumVec;
+
+	std::map<int,std::vector<std::string>>:: iterator i;
+	for(i = snpLineMap.begin(); i != snpLineMap.end(); i++){
+		sortedLineNumVec.push_back(i->first);
+	}
+	std::sort(sortedLineNumVec.begin(), sortedLineNumVec.end());
+	return sortedLineNumVec;
+
+}
+
+//following function count the genotype 
 
 std::vector<int> countGenotypes(std::string& popString){
 	
@@ -214,22 +251,48 @@ std::vector<float> calcPopMeasures(std::map<int,int>& sfsArray, int& samplePopCo
 
     return popMeasures;
 }
-    
 
 
-void writeOutput(const std::string& genoFile, std::map<std::string,std::vector<int>>& popMap, std::vector<int>& snpVec, const std::string& outPopName){
-	
+void writeOutput(std::map<std::string,std::vector<int>>& popDerivedCountMap, std::map<std::string, std::vector<int>>& popMap, std::vector<std::string>& popVec, std::map<int,std::vector<std::string>>& snpLineMap, int& lineCount){
 
-	//FILE fp[popSize];
-	
+	//create file pointer variable
 
 	std::ofstream os;
+
+	for(std::string pop : popVec ){
+		int sampleSize = popMap[pop].size();
+		std::map<int,int>popSfs = alleleCntToSfs(popDerivedCountMap[pop], sampleSize);
+		std::vector<float>popMeasures = calcPopMeasures(popSfs, sampleSize);
+		std::string popName = pop;
+		const char *popF = popName.c_str();
+		std::vector<std::string>tmpMap = snpLineMap[lineCount];
+		os.open(popF, std::ofstream::out | std::ofstream::app);
+		os<<tmpMap[0]<<"\t"<<tmpMap[1]<<"\t";
+		for(float measure: popMeasures ){
+			os<< measure <<"\t";
+		}
+		os<<"\n";
+		os.close();
+	}
+
+}
+
+void readGenoWriteOutput(const std::string& genoFile, std::map<std::string,std::vector<int>>& popMap, std::map<int,std::vector<std::string>>& snpLineMap, const std::string& outPopName){
+	
+
+	
+	//following method retrieve the sorted vector of line number
+	
+	std::vector<int>sortedLineNumVec = snpLineMapToSortedLineNumVec(snpLineMap);
+
 
 	//the following variable compare the element from snpvec with that of the line count in the geno file
 	int snpVecCompare = 0;
 
 	int lineCount = 0;
+	
 	//following map store pop as key and the vector of derived alleles as its value
+	
 	std::map<std::string,std::vector<int>> popDerivedCountMap;
 
 	std::vector<std::string>popVec;
@@ -241,40 +304,29 @@ void writeOutput(const std::string& genoFile, std::map<std::string,std::vector<i
 		popVec.push_back(p->first);
 	}
 	
-	//open file pointer to write and append the output for each population
-	/*
-	for(int i=0;i<popVec.size();i++){
-		std::string popName = popVec[i];
-		const char *popF = popName.c_str();
-		os.open(popF,std::ofstream::out | std::ofstream::app);
-		os<<"first time"<<"\n";
-		os.close();
-	}
-	*/
-
 	std::ifstream source;
 	source.open(genoFile);
 	std::string line;
 	while(std::getline(source,line)){
 		lineCount +=1;
 		std::map<std::string,int> locusDerivedCountMap = countDerivedAllele(line, popMap, outPopName);
+		if( lineCount > sortedLineNumVec[snpVecCompare] ){
+			writeOutput(popDerivedCountMap, popMap, popVec, snpLineMap, sortedLineNumVec[snpVecCompare]);
+			snpVecCompare ++;
+			std::map<std::string,std::vector<int>>::iterator p;
+			for(p=popMap.begin(); p!=popMap.end();p++){
+				popDerivedCountMap[p->first].clear();
+			}
+		
+		}
 		for(std::string i : popVec){
 			popDerivedCountMap[i].push_back(locusDerivedCountMap[i]);
 		}
 	
 	}
-
-	for(std::string pop : popVec ){
-		int sampleSize = popMap[pop].size();
-		std::map<int,int>popSfs = alleleCntToSfs(popDerivedCountMap[pop], sampleSize);
-		std::vector<float>popMeasures = calcPopMeasures(popSfs, sampleSize);
-		for(float measure: popMeasures ){
-				std::cout<< measure <<"\n";
-		}
-
+	if (popDerivedCountMap[popVec[0]].size() > 0){
+		writeOutput(popDerivedCountMap, popMap, popVec, snpLineMap, sortedLineNumVec[snpVecCompare]);
 	}
-	
-
 }
 
 
@@ -287,6 +339,6 @@ int main(int argc, char **argv){
     std::string outPopName(argv[5]);
     //the following function stores the pop and its sample position in each row of the geno file 
     std::map<std::string,std::vector<int>> popMap = indToMap(indFile);
-    std::vector<int>snpVec = snpToVec(snpFile, windowSize);
-    writeOutput(genoFile,popMap,snpVec, outPopName);
+    std::map<int,std::vector<std::string>>snpLineMap = snpToMap(snpFile, windowSize);
+    readGenoWriteOutput(genoFile,popMap,snpLineMap, outPopName);
 }
