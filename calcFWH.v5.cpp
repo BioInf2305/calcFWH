@@ -64,7 +64,6 @@ std::map<int,std::vector<std::string>> snpToMap(const std::string& snpFile, int&
 	std::string maxWindow = "-9";
 	std::string chrom = "NA";
 	std::vector<std::string>vectorLine;
-	std::string stringPos = "NA";
 	std::ifstream source;
 	source.open(snpFile);
 	std::string line;
