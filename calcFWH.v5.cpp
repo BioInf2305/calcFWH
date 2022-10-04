@@ -14,7 +14,7 @@ std::map<std::string,std::vector<int>> indToMap(const std::string& indFile){
 
     	std::map<std::string,std::vector<int>> popMap;
 	//the following variable link the individual from .indi file to its respective genotype position in each row in geno file
-	int lineNumber = 0;
+	int lineNumber = -1;
 
         std::ifstream source;
         source.open(indFile);
@@ -30,13 +30,15 @@ std::map<std::string,std::vector<int>> indToMap(const std::string& indFile){
                 vectorLine.push_back(word);
             }
 	std::string popName = vectorLine[2];
-
         if(popMap.find(popName) == popMap.end()){
 		//if the population id is not in popmap file,create empty vector as value
-		std::vector<int>lineCountVec;
-		popMap[popName] = lineCountVec;
+		std::vector<int> lineCountVec;
+		lineCountVec.push_back(lineNumber);
+
 	 	}
 	popMap[popName].push_back(lineNumber);
+		
+	
     }
 
 
@@ -106,27 +108,28 @@ std::vector<int> countGenotypes(std::string& popString){
 
 }
 
-std::map<std::string,int> countDerivedAllele(std::string& line, std::map<std::string,std::vector<int>& popMap, const std::string& outPopName){
+std::map<std::string,int> countDerivedAllele(std::string& line, std::map<std::string,std::vector<int>>& popMap, const std::string& outPopName){
 
 	std::map<std::string,int> locusDerivedCountMap;
+	int derivedAllele;
 
 	if(outPopName != "NA"){
 		std::vector<int>posVec;
 		std::string outPopGeno="";
 		posVec = popMap[outPopName];
-		for(int i : line){
-			outPopGeno += line[i]
+		for(int i : posVec){
+			outPopGeno += line[i];
 		}
 		std::vector<int>countGenoVec = countGenotypes(outPopGeno);
-		std::int derivedAllele = (countGenoVec[1] >= countGenoVec[0]) ? 1 : 0;
+		derivedAllele = (countGenoVec[1] >= countGenoVec[0]) ? 1 : 0;
 
 	}
 	else{
-		std::vector<int>countGenoVec = countGenotypes(line);
-		std::int derivedAllele = (countGenoVec[1] >= countGenoVec[0]) ? 1 : 0;
-	}
 
-	std::map<std::string,std::vector<int>:: iterator p;
+		std::vector<int>countGenoVec = countGenotypes(line);
+		derivedAllele = (countGenoVec[1] >= countGenoVec[0]) ? 0 : 1;
+	}
+	std::map<std::string,std::vector<int>>:: iterator p;
 	for(p = popMap.begin(); p!=popMap.end(); p++){
 		std::string popSeq = "";
 		if(p->first != outPopName){
@@ -142,9 +145,86 @@ std::map<std::string,int> countDerivedAllele(std::string& line, std::map<std::st
 	return locusDerivedCountMap;
 }
 
+
+std::map<int,int> alleleCntToSfs(std::vector<int>& derivedAlleleCountVec, int& sampleCountPop){
+
+	std::map<int,int>popSfs;
+
+	std::sort(derivedAlleleCountVec.begin(), derivedAlleleCountVec.end());
+
+	for(int i=0; i<sampleCountPop+1;i++){
+		int siteCount;
+		siteCount = std::count(derivedAlleleCountVec.begin(), derivedAlleleCountVec.end(), i);
+		popSfs[i] = siteCount;
+	}
+	
+	return popSfs;
+
+}
+
+
+std::vector<float> calcPopMeasures(std::map<int,int>& sfsArray, int& samplePopCount){
+
+    float a1 = 0.0;
+    float a2 = 0.0;
+    float thetaL_num = 0.0;
+    int numPi = 0 ;
+    int numH = 0;
+    int segSites = 0;
+    int popSampleCount = 2 * samplePopCount;
+    int denomPi = popSampleCount * ( popSampleCount - 1 );
+    for( int i=1; i<popSampleCount ; i++ ){
+	a1 += 1/ (float) i;
+	a2 += 1/((float) i * (float) i);
+        segSites += sfsArray[i];
+        numPi += 2 * sfsArray[i] * i * ( popSampleCount - i);
+        numH += 2* sfsArray[i] * i *i;
+	thetaL_num += i * sfsArray[i];
+    }
+
+    float b1 = (float)(popSampleCount+1)/(float)(3*popSampleCount-3);
+    float b2 = 2*((float)(popSampleCount*popSampleCount)+(float)(popSampleCount)+3)/(9*(float)(popSampleCount)*(float)(popSampleCount-1));
+    float c1 = b1 - (1/a1);
+    float c2 = b2 - ((float) (popSampleCount+2)/( a1 * (float) popSampleCount))+(a2/(a1*a1));
+    float e1 = c1/a1;
+    float e2 = c2/(a1*a1+a2);
+    float numSeg = (float) segSites;
+    float thetaW = (float) numSeg/ a1;
+    float pi = (float) numPi/(float) denomPi;
+    float tajimaDNum = pi - thetaW;
+    float tajimaDDeno = e1*numSeg + e2*numSeg*(numSeg-1);
+    float tajimaD = tajimaDNum/sqrt(tajimaDDeno);
+
+    float thetaL = thetaL_num/(float) (popSampleCount-1);
+    float thetaH = (float) numH/(float) denomPi;
+    float FWH = pi - thetaH;
+    float Hnum = pi - thetaL;
+    float Hden_LHS = ((popSampleCount-2)/6*(popSampleCount-1))*thetaW;
+    float theta_square = (numSeg * (numSeg-1))/(a1*a1+a2);
+    float Hden_RHSnum = ((18*popSampleCount*popSampleCount*(3*popSampleCount+2)*a2*a2)-
+		    (88*popSampleCount*popSampleCount*popSampleCount+9*popSampleCount*popSampleCount-13*popSampleCount+
+		     6)) * theta_square;
+    int Hden_RHSden = 9*popSampleCount*(popSampleCount-1)*(popSampleCount-1);
+
+    float Hden_RHS = Hden_RHSnum/(float) Hden_RHSden;
+    float Hden = sqrt(Hden_RHS+Hden_LHS);
+    float H = Hnum/Hden;  
+
+    std::vector<float> popMeasures{numSeg, thetaW, pi, tajimaD, FWH, H};
+
+    return popMeasures;
+}
+    
+
+
 void writeOutput(const std::string& genoFile, std::map<std::string,std::vector<int>>& popMap, std::vector<int>& snpVec, const std::string& outPopName){
 	
-	FILE *fp[popMap.size()];
+
+	//FILE fp[popSize];
+	
+
+	std::ofstream os;
+
 	//the following variable compare the element from snpvec with that of the line count in the geno file
 	int snpVecCompare = 0;
 
@@ -152,7 +232,7 @@ void writeOutput(const std::string& genoFile, std::map<std::string,std::vector<i
 	//following map store pop as key and the vector of derived alleles as its value
 	std::map<std::string,std::vector<int>> popDerivedCountMap;
 
-	std::vec<std::string>popVec;
+	std::vector<std::string>popVec;
 
 	std::map<std::string,std::vector<int>>::iterator p;
 	for(p=popMap.begin(); p!=popMap.end();p++){
@@ -162,21 +242,41 @@ void writeOutput(const std::string& genoFile, std::map<std::string,std::vector<i
 	}
 	
 	//open file pointer to write and append the output for each population
-	
+	/*
 	for(int i=0;i<popVec.size();i++){
-		fp[i] = (popVec[i]+".out.txt","a");
+		std::string popName = popVec[i];
+		const char *popF = popName.c_str();
+		os.open(popF,std::ofstream::out | std::ofstream::app);
+		os<<"first time"<<"\n";
+		os.close();
 	}
+	*/
 
 	std::ifstream source;
 	source.open(genoFile);
 	std::string line;
 	while(std::getline(source,line)){
 		lineCount +=1;
-		std::map<std::string,int> locusDerivedCountMap = countDerivedAllele(line, popMap, outPopName)
-		
+		std::map<std::string,int> locusDerivedCountMap = countDerivedAllele(line, popMap, outPopName);
+		for(std::string i : popVec){
+			popDerivedCountMap[i].push_back(locusDerivedCountMap[i]);
+		}
+	
+	}
 
+	for(std::string pop : popVec ){
+		int sampleSize = popMap[pop].size();
+		std::map<int,int>popSfs = alleleCntToSfs(popDerivedCountMap[pop], sampleSize);
+		std::vector<float>popMeasures = calcPopMeasures(popSfs, sampleSize);
+		for(float measure: popMeasures ){
+				std::cout<< measure <<"\n";
+		}
+
+	}
+	
 
 }
+
 
 
 int main(int argc, char **argv){
@@ -188,5 +288,5 @@ int main(int argc, char **argv){
     //the following function stores the pop and its sample position in each row of the geno file 
     std::map<std::string,std::vector<int>> popMap = indToMap(indFile);
     std::vector<int>snpVec = snpToVec(snpFile, windowSize);
-    writeOutput(genoFile,popMap,snpTovec, outPopName);
+    writeOutput(genoFile,popMap,snpVec, outPopName);
 }
