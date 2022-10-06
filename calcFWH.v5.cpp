@@ -18,29 +18,36 @@
 std::map<std::string,std::vector<int>> indToMap(const std::string& indFile){
 
     	std::map<std::string,std::vector<int>> popMap;
-	//the following variable link the individual from .indi file to its respective genotype position in each row in geno file
+   
+   //the following variable link the individual from .indi file to its respective genotype position in each row in geno file
 	int lineNumber = -1;
 
         std::ifstream source;
         source.open(indFile);
         std::string line;
-	//read the file
-        while (std::getline(source, line)){
-	        lineNumber +=1 ;
-            std::stringstream ss ( line );
-            std::vector<std::string> vectorLine;
-	    //store its content in another vector, easy to retrieve the desire column
-            for ( std::string line; ss >> line; ){
-                vectorLine.push_back(line);
-            }
-	std::string popName = vectorLine[2];
-        if(popMap.find(popName) == popMap.end()){
-		//if the population id is not in popmap file,create empty vector as value
-		std::vector<int> lineCountVec;
-		lineCountVec.push_back(lineNumber);
 
-	 	}
-	popMap[popName].push_back(lineNumber);
+	    //read .indi file
+        while (std::getline(source, line)){
+
+                lineNumber +=1 ;
+                std::stringstream ss ( line );
+                std::vector<std::string> vectorLine;
+
+            //store its content in another vector, easy to retrieve the desire column
+                for ( std::string line; ss >> line; ){
+
+                    vectorLine.push_back(line);
+                }
+                std::string popName = vectorLine[2];
+                if(popMap.find(popName) == popMap.end()){
+
+            //if the population id is not in popmap file,create empty vector as value
+                    std::vector<int> lineCountVec;
+
+                    lineCountVec.push_back(lineNumber);
+
+	 	        }
+	            popMap[popName].push_back(lineNumber);
 		
 	
     }
@@ -49,52 +56,76 @@ std::map<std::string,std::vector<int>> indToMap(const std::string& indFile){
     return popMap;
 }
 
-//folllowing function output the map with line number as key and vector of chrom name and position as value
-//{1,{chrm1,10},2,{chrm1,11},3,{chrm1,12}}
+//folllowing function output the map with line number as key and vector of chrom name, and start position and end position of the windows as values
+//{1,{chrm1,0,50},2,{chrm1,0,50}}
 
 std::map<int,std::vector<std::string>> snpToMap(const std::string& snpFile, int& windowSize){
 	
 	std::map<int,std::vector<std::string>> snpLineMap;
-	//the following variable link the marker record from .snp file to its respective row in geno file
+	
+    //the following variable link the marker record from .snp file to its respective row in geno file, it is also the key in map
 	int lineNumber = 0;
 
 	int startWindow = 0;
+
 	int pos = 0;
 	std::string minWindow = "-9";
 	std::string maxWindow = "-9";
 	std::string chrom = "NA";
+    
+    //folowing vector stores the splitted content of each line
 	std::vector<std::string>vectorLine;
+
 	std::ifstream source;
 	source.open(snpFile);
 	std::string line;
+
+    //start reading the file
 	while(std::getline(source,line)){
-		lineNumber +=1 ;
+
+		lineNumber ++ ;
 		std::stringstream ss (line);
+        
+        //clear the content of the previous line
 		vectorLine.clear();
+
+        //split line by white space delimiter
 		for (std::string line; ss >> line;){
 			vectorLine.push_back(line);
 		}
-		//if the chromosome name changes, add the last record as the row number
+		
+        //if the chromosome name changes, add the last record in the map
 		if (vectorLine[1] != chrom && chrom != "NA" ){
 			chrom = vectorLine[1];
 			startWindow = windowSize;
 			std::vector<std::string>tmpVec {vectorLine[1], minWindow, maxWindow};
+
+            //substract -1 as +1 has been added to line number
 			snpLineMap[ lineNumber - 1 ] = tmpVec;
 		}
 		
-		int pos = std::stoi(vectorLine[4]);
+		int pos = std::stoi(vectorLine[3]);
 		chrom = vectorLine[1];
+
+        // if the position increases the startwindow, add the lineNumber to the map
 		if(pos>startWindow){
-			std::cout<<"first loop"<<"\n";
+
 			int insideWhile = 0;
+
+            // here it is assumed that there might be gap of more than the windowSize between two consecutive SNPs, therefore keep adding windowSize
 			while(pos > startWindow){
+
 				insideWhile = 1;
 				startWindow += windowSize;
 				}	
 			if(insideWhile == 1){
+
+            //minWindow is the closest position from the pos with remainder zero 
 				minWindow = std::to_string(pos - pos % windowSize);
+
+            //maxWindow is just the minWindow + windowSize 
 				maxWindow = std::to_string(std::stoi(minWindow)+windowSize);
-				std::cout<<lineNumber<<" "<<minWindow<<" "<<maxWindow<<"\n";
+
 				std::vector<std::string>tmpVec {vectorLine[1], minWindow, maxWindow};
 				snpLineMap[lineNumber] = tmpVec;
 				}
@@ -103,9 +134,10 @@ std::map<int,std::vector<std::string>> snpToMap(const std::string& snpFile, int&
 
 			
 	}
-	//add the last record in map
+
+	//add the last record in map if it exceeds the maxWindow size variable stored in the previously added record
 	if( pos > stoi(maxWindow) ){
-		std::cout<<"second loop"<<"\n";
+
 		std::vector<std::string>tmpVec {vectorLine[1],minWindow, maxWindow};
 		snpLineMap[lineNumber] = tmpVec;
 	}
