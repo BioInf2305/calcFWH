@@ -26,13 +26,12 @@ std::map<std::string,std::vector<int>> indToMap(const std::string& indFile){
         std::string line;
 	//read the file
         while (std::getline(source, line)){
-	    lineNumber +=1 ;
+	        lineNumber +=1 ;
             std::stringstream ss ( line );
-            std::string word;
             std::vector<std::string> vectorLine;
 	    //store its content in another vector, easy to retrieve the desire column
-            while ( std::getline ( ss, word, ' ' ) ){
-                vectorLine.push_back(word);
+            for ( std::string line; ss >> line; ){
+                vectorLine.push_back(line);
             }
 	std::string popName = vectorLine[2];
         if(popMap.find(popName) == popMap.end()){
@@ -59,7 +58,8 @@ std::map<int,std::vector<std::string>> snpToMap(const std::string& snpFile, int&
 	//the following variable link the marker record from .snp file to its respective row in geno file
 	int lineNumber = 0;
 
-	int startWindow = windowSize;
+	int startWindow = 0;
+	int pos = 0;
 	std::string minWindow = "-9";
 	std::string maxWindow = "-9";
 	std::string chrom = "NA";
@@ -70,29 +70,32 @@ std::map<int,std::vector<std::string>> snpToMap(const std::string& snpFile, int&
 	while(std::getline(source,line)){
 		lineNumber +=1 ;
 		std::stringstream ss (line);
-		std::string word;
 		vectorLine.clear();
-		while(std::getline(ss, word, ' ')){
-			vectorLine.push_back(word);
+		for (std::string line; ss >> line;){
+			vectorLine.push_back(line);
 		}
-		int pos = std::stoi(vectorLine[3]);
-		minWindow = std::to_string(pos - pos % windowSize);
-		maxWindow = std::to_string(std::stoi(minWindow)+windowSize);
 		//if the chromosome name changes, add the last record as the row number
-		if (vectorLine[0] != chrom && chrom != "NA" ){
-			chrom = vectorLine[0];
+		if (vectorLine[1] != chrom && chrom != "NA" ){
+			chrom = vectorLine[1];
 			startWindow = windowSize;
-			std::vector<std::string>tmpVec {vectorLine[0], minWindow, maxWindow};
-			snpLineMap[lineNumber] = tmpVec;
+			std::vector<std::string>tmpVec {vectorLine[1], minWindow, maxWindow};
+			snpLineMap[ lineNumber - 1 ] = tmpVec;
 		}
+		
+		int pos = std::stoi(vectorLine[4]);
+		chrom = vectorLine[1];
 		if(pos>startWindow){
+			std::cout<<"first loop"<<"\n";
 			int insideWhile = 0;
 			while(pos > startWindow){
 				insideWhile = 1;
 				startWindow += windowSize;
 				}	
 			if(insideWhile == 1){
-				std::vector<std::string>tmpVec {vectorLine[0], minWindow, maxWindow};
+				minWindow = std::to_string(pos - pos % windowSize);
+				maxWindow = std::to_string(std::stoi(minWindow)+windowSize);
+				std::cout<<lineNumber<<" "<<minWindow<<" "<<maxWindow<<"\n";
+				std::vector<std::string>tmpVec {vectorLine[1], minWindow, maxWindow};
 				snpLineMap[lineNumber] = tmpVec;
 				}
 
@@ -101,8 +104,9 @@ std::map<int,std::vector<std::string>> snpToMap(const std::string& snpFile, int&
 			
 	}
 	//add the last record in map
-	if(vectorLine.size()>0){
-		std::vector<std::string>tmpVec {vectorLine[0],minWindow, maxWindow};
+	if( pos > stoi(maxWindow) ){
+		std::cout<<"second loop"<<"\n";
+		std::vector<std::string>tmpVec {vectorLine[1],minWindow, maxWindow};
 		snpLineMap[lineNumber] = tmpVec;
 	}
 	
@@ -313,14 +317,16 @@ void readGenoWriteOutput(const std::string& genoFile, std::map<std::string,std::
 	while(std::getline(source,line)){
 		lineCount +=1;
 		std::map<std::string,int> locusDerivedCountMap = countDerivedAllele(line, popMap, outPopName);
-		if( lineCount > sortedLineNumVec[snpVecCompare] ){
-			writeOutput(popDerivedCountMap, popMap, popVec, snpLineMap, sortedLineNumVec[snpVecCompare]);
-			snpVecCompare ++;
-			std::map<std::string,std::vector<int>>::iterator p;
-			for(p=popMap.begin(); p!=popMap.end();p++){
-				popDerivedCountMap[p->first].clear();
+		if ( snpVecCompare+1 != sortedLineNumVec.size() ) {
+			if( lineCount >= sortedLineNumVec[snpVecCompare+1] ){
+				writeOutput(popDerivedCountMap, popMap, popVec, snpLineMap, sortedLineNumVec[snpVecCompare]);
+				snpVecCompare ++;
+				std::map<std::string,std::vector<int>>::iterator p;
+				for(p=popMap.begin(); p!=popMap.end();p++){
+					popDerivedCountMap[p->first].clear();
+				}
+			
 			}
-		
 		}
 		for(std::string i : popVec){
 			popDerivedCountMap[i].push_back(locusDerivedCountMap[i]);
